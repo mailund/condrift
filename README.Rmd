@@ -1,5 +1,23 @@
+---
+title: "condrift: Conditional drift in an admixture graph"
+output:
+  md_document:
+    variant: markdown_github
+---
+
 <!-- README.md is generated from README.Rmd. Please edit that file -->
-``` r
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+
+suppressPackageStartupMessages(library(ggplot2, quietly = TRUE))
+```
+
+```{r}
 joint_drift_model <- function(mu, Sigma) {
   structure(list(mu = mu, Sigma = Sigma),
             class = "drift_model")
@@ -37,7 +55,7 @@ plot.drift_model <- function(x, ..., indices = c(1, 2)) {
 }
 ```
 
-``` r
+```{r}
 test_mu <- c(0.5, 0.2, 0.6)
 test_Sigma <- matrix(c(
   0.1,  0.06, 0.1,
@@ -45,43 +63,45 @@ test_Sigma <- matrix(c(
   0.1,  0.0,  0.3
   ), byrow = TRUE, nrow = 3)
 model <- joint_drift_model(test_mu, test_Sigma)
-plot(model, xlab = "Pop 1", ylab = "Pop 2")
+plot(model) + xlab("Pop 1") + ylab("Pop 2")
+plot(model, indices = c(1,3)) + xlab("Pop 1") + ylab("Pop 3")
+plot(model, indices = c(2,3)) + xlab("Pop 2") + ylab("Pop 3")
 ```
 
-![](README-unnamed-chunk-2-1.png)
-
-``` r
-plot(model, indices = c(1,3), xlab = "Pop 1", ylab = "Pop 3")
-```
-
-![](README-unnamed-chunk-2-2.png)
-
-``` r
-plot(model, indices = c(2,3), xlab = "Pop 2", ylab = "Pop 3")
-```
-
-![](README-unnamed-chunk-2-3.png)
-
-``` r
+```{r}
 plot(condition(model, index = 1, freq = 0.1))
-```
-
-![](README-unnamed-chunk-3-1.png)
-
-``` r
 plot(condition(model, index = 1, freq = 0.4))
-```
-
-![](README-unnamed-chunk-3-2.png)
-
-``` r
 plot(condition(model, index = 1, freq = 0.6))
-```
-
-![](README-unnamed-chunk-3-3.png)
-
-``` r
 plot(condition(model, index = 1, freq = 0.8))
 ```
 
-![](README-unnamed-chunk-3-4.png)
+```{r}
+expected_F4 <- function(model, a, b, c, d) {
+  # E[(a-b)(c-d)] = E[ac]-E[ad]-E[bc]+E[bd]
+  # E[xy] = E[x]E[y] + Cov(x,y)
+  Eac <- model$mu[a] * model$mu[c] + model$Sigma[a, c]
+  Ead <- model$mu[a] * model$mu[d] + model$Sigma[a, d]
+  Ebc <- model$mu[b] * model$mu[c] + model$Sigma[b, c]
+  Ebd <- model$mu[b] * model$mu[d] + model$Sigma[b, d]
+  Eac - Ead - Ebc + Ebd
+}
+
+conditional_expected_F4 <- function(model, a, b, c, d, x) {
+  function (f) {
+    conditional_model <- condition(model, index = x, freq = f)
+    expected_F4(conditional_model, a, b, c, d)  
+  }
+}
+
+
+```
+
+```{r}
+test_mu <- c(0.5, 0.2, 0.6, 0.5, 0.5)
+test_Sigma <- matrix(c(
+  0.1,  0.06, 0.1, 0.04, 0.05,
+  0.06, 0.1,  0.0, 0.00, 0.00,
+  0.1,  0.0,  0.3
+  ), byrow = TRUE, nrow = 3)
+model <- joint_drift_model(test_mu, test_Sigma)
+```
