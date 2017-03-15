@@ -1,11 +1,14 @@
 Package: condrift
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Statistics on conditional drift
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Author: Thomas Mailund
+Maintainer: Thomas Mailund <mailund@birc.au.dk>
+Description: This package computes expected values of shared drift statistics
+    conditional on allele frequencies in a subset of populations.
+License: GPL-3
 Encoding: UTF-8
 LazyData: true
+Suggests:
+    admixturegraph
+RoxygenNote: 5.0.1

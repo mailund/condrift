@@ -15,6 +15,7 @@ knitr::opts_chunk$set(
 
 suppressPackageStartupMessages(library(ggplot2, quietly = TRUE))
 suppressPackageStartupMessages(library(admixturegraph, quietly = TRUE))
+suppressPackageStartupMessages(library(condrift, quietly = TRUE))
 ```
 
 We can consider an admixture graph like the following:
@@ -47,61 +48,21 @@ graph <- agraph(leaves, inner_nodes, edges)
 plot(graph, show_admixture_labels = TRUE)
 ```
 
-The graph topology together with the edge lengths and admixture proportions define a covariance matrix $\Sigma$ where entry $\sigma_{ij}$ is given by the $F_2(i,j)$ statistics. This statistics we can both infer from the data and extract from a fitted graph. I haven't fitted the graph here, so the covariance matrix shown below is completely arbitrary, but it is extracted from the graph.
+The graph topology together with the edge lengths and admixture proportions define a covariance matrix $\Sigma$ where entry $\sigma_{ij}$ is given by the $F_3(r;i,j)$ statistics where $r$ is an arbitrary leaf we choose to root our covariance matrix in (see Felsenstein 2004 chapter 23). This statistics we can both infer from the data and extract from a fitted graph. I haven't fitted the graph here, so the covariance matrix shown below is completely arbitrary, but it is extracted from the graph where I've used $C$ as root.
 
 ```{r, echo=FALSE}
-# Here I'm setting the diagonal to be 1 rather arbitrary... should estimate it.
-extract_covariance_matrix <- function(graph, env, diag = rep(1.0, length(graph$leaves))) {
-  populations <- graph$leaves
-  Sigma <- matrix(NA, nrow = length(populations), ncol = length(populations))
-  for (i in seq_along(leaves)) {
-    for (j in seq_along(leaves)) {
-      if (i != j)
-        Sigma[i, j] <- eval(sf2(graph, leaves[i], leaves[j]), env)
-    }
-  }
-  diag(Sigma) <- diag
-  rownames(Sigma) <- colnames(Sigma) <- graph$leaves
-  Sigma
-}
-
-Sigma <- extract_covariance_matrix(graph, list2env(list(
+edge_lengths <- list2env(list(
   a = 0.05, b = 0.02, edge_d_D = 0.008, edge_Z_d = 0.005, edge_W_Alt = 0.001, 
   edge_Z_W = 0.001, edge_X_x = 0.1, edge_X_Y = 0.002, edge_Y_Z = 0.2,
   edge_x_d = 0.002, edge_w_V = 0.002, edge_W_w = 0.002, edge_U_v = 0.003,
-  edge_v_xx = 0.0001, edge_xx_EU = 0.001, edge_Y_U = 0.01, edge_w_v = 0.003, 
-  edge_xx_EA = 0.0003, edge_U_Af = 0.004, edge_R_C = 0.2, edge_R_X = 0.004)))
+  edge_v_xx = 0.01, edge_xx_EU = 0.001, edge_Y_U = 0.01, edge_w_v = 0.003, 
+  edge_xx_EA = 0.0003, edge_U_Af = 0.004, edge_R_C = 0.2, edge_R_X = 0.004))
 
+Sigma <- extract_covariance_matrix(graph, edge_lengths, "C")
 Sigma
 ```
 
 ```{r, echo=FALSE}
-joint_drift_model <- function(mu, Sigma) {
-  structure(list(mu = mu, Sigma = Sigma),
-            class = "drift_model")
-}
-
-condition <- function(model, index, freq) {
-  if (is.character(index))
-    index <- which(index == rownames(model$Sigma))
-
-  mu_1 <- model$mu[-index]
-  mu_2 <- model$mu[index]
-  Sigma_11 <- model$Sigma[-index, -index]
-  Sigma_12 <- model$Sigma[-index, index]
-  Sigma_21 <- model$Sigma[index, -index]
-  Sigma_22 <- model$Sigma[index, index]
-  
-  X <- Sigma_12 %*% solve(Sigma_22)
-  new_mu <- mu_1 + X %*% (freq - mu_2)
-  new_Sigma <- Sigma_11 - X %*% Sigma_21
-  
-  names(new_mu) <- names(mu_1)
-  rownames(new_Sigma) <- colnames(new_Sigma) <- rownames(Sigma_11)
-  
-  joint_drift_model(new_mu, new_Sigma)
-}
-
 plot.drift_model <- function(x, ..., indices = c(1, 2)) {
   i <- indices[1]
   j <- indices[2]
@@ -127,8 +88,8 @@ plot.drift_model <- function(x, ..., indices = c(1, 2)) {
 Since the graph gives us a multivariate Normal distribution of allele frequencies, we can relatively easy compute conditional probabilities, capturing what the correlation of two populations should be conditional on another, for example.
 
 ```{r}
-mu <- rep(0.5, length(graph$leaves))
-names(mu) <- graph$leaves
+mu <- rep(0.5, length(graph$leaves) - 1) # arbitrary choice...
+names(mu) <- graph$leaves[graph$leaves != "C"]
 model <- joint_drift_model(mu, Sigma)
 
 plot_conditional_distribution <- function(a, b, x, f) {
@@ -140,6 +101,10 @@ plot_conditional_distribution("D", "V", "Af", f = 0.01)
 plot_conditional_distribution("D", "V", "Af", f = 0.3)
 plot_conditional_distribution("D", "V", "Af", f = 0.7)
 plot_conditional_distribution("D", "V", "Af", f = 0.9)
+
+plot_conditional_distribution("EU", "EA", "Af", f = 0.1)
+plot_conditional_distribution("EU", "EA", "Af", f = 0.5)
+plot_conditional_distribution("EU", "EA", "Af", f = 0.9)
 ```
 
 ```{r}
@@ -165,15 +130,11 @@ conditional_expected_F4 <- function(model, a, b, c, d, x) {
 ```{r}
 freqs <- seq(0, 1, length.out = 200)
 
-cond_F4 <- conditional_expected_F4(model, "D", "V", "Af", "C", "EU")
+cond_F4 <- conditional_expected_F4(model, "D", "V", "Af", "Alt", "EU")
 plot(freqs, cond_F4(freqs), type = 'l', xlab = "EU allele freq", 
-     ylab = quote(F[4](D, V, Af, C)))
+     ylab = quote(F[4](D, V, Af, Alt)))
 
-cond_F4 <- conditional_expected_F4(model, "D", "V", "EA", "C", "Af")
+cond_F4 <- conditional_expected_F4(model, "EU", "EA", "V", "Alt", "Af")
 plot(freqs, cond_F4(freqs), type = 'l', xlab = "Af allele freq", 
-     ylab = quote(F[4](D, V, EA, C)))
-
-cond_F4 <- conditional_expected_F4(model, "EU", "EA", "V", "C", "Af")
-plot(freqs, cond_F4(freqs), type = 'l', xlab = "Af allele freq", 
-     ylab = quote(F[4](EU, EA, V, C)))
+     ylab = quote(F[4](EU, EA, V, Alt)))
 ```
